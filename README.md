@@ -1,1 +1,6 @@
-# cisco-policy-suite
+Scripts I've written while supporting Cisco Policy Suite, Cisco's great PCRF
+product. Some are pretty specialized. Perhaps someone can find some use for
+these.
+
+Note: these scripts are not official Cisco products, and there is no support
+offered, nor any warranty or guarantees for use.
