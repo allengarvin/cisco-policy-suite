@@ -76,7 +76,11 @@ def grep(opts, fn):
         current_pos = fd.tell()
         while True:
             time.sleep(0.1)
-            f_stat = os.stat(fn)
+            if os.path.isfile(fn):
+                f_stat = os.stat(fn)
+            else:
+                continue
+
             if orig_stat.st_ino != f_stat.st_ino:
                 try:
                     fd = open(fn, "r")
