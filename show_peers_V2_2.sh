@@ -6,8 +6,8 @@
 # Designed by: Rohit Jain (rohitja@Cisco.COM), Yousif.Aluzri@Cisco.COM
 # Version: 1.0
 # Date: Thu May  7 21:35:00 PDT 2015
-# File Mode: 555 
-# 
+# File Mode: 555
+#
 # Purpose: Report on diameter peering state for
 #          lb0x qns processes.
 #
@@ -26,6 +26,7 @@
 #############
 # Version 2.2 (Wed Oct 12 2019)
 #  -Author: yjuarezh@cisco.com
+#  - Yeimi Juarez Herandez
 #  -Fixed for CPS 19.4
 #  -
 # Version 2.1 (Wed Nov 15 10:54:00 MST 2017)
@@ -36,7 +37,7 @@
 # Version 2.0 (Tues October 3 20:17:00 MST 2017)
 #  -Author: lelee2@cisco.com
 #  -Updated to include lb03 and lb04
-#  -Replace Sy' with Sh 
+#  -Replace Sy' with Sh
 #  -Removed Sd interface
 #  -Modified verbose mode to display the diameter network's IPv6 address
 #
@@ -44,7 +45,7 @@
 #  -Author: Yousif.Aluzri@Cisco.COM
 #  -Needs further refinements.
 #  -IP addresses are only provided in verbose mode.
-#  -Cleaned up some portions of the code. 
+#  -Cleaned up some portions of the code.
 #
 # Version 0.9 (Tue May  5 23:02:16 PDT 2015)
 #  -Author: Yousif.Aluzri@Cisco.COM
@@ -196,10 +197,10 @@ formatOff=$(echo -e '\e[0m')
 # Function to clean up any clutter we create.
 __exitGracefully () {
     # Clean up $tmpDir, if it exists.
-    if [[ -d "$tmpDir" ]] 
+    if [[ -d "$tmpDir" ]]
     then
         wait
-        rm -rf $tmpDir 2>/dev/null 
+        rm -rf $tmpDir 2>/dev/null
     fi
 
     echo -e "\n\n"
@@ -236,8 +237,8 @@ __printUsage () {
   USAGE: $0 --lb01|--lb02|--lb03|--lb04|--all [OPTIONS]
 
 
-  SUMMARY: Report on Diameter interface peering for 
-           either lb01, lb02, lb03, or lb04. 
+  SUMMARY: Report on Diameter interface peering for
+           either lb01, lb02, lb03, or lb04.
 
 
 
@@ -265,7 +266,7 @@ __printUsage () {
                      peer state.
 
    EXAMPLES:
-   
+
      $0 --lb01 --gx
 
      =============================================================================
@@ -340,15 +341,15 @@ __parseInput () {
             --lb02)
                 lbHostList[lb02]=
                 shift 1
-                ;;       
+                ;;
             --lb03)
                 lbHostList[lb03]=
                 shift 1
-                ;;       
+                ;;
             --lb04)
                 lbHostList[lb04]=
                 shift 1
-                ;;       
+                ;;
             --loop)
                 loopMode=1
                 shift 1
@@ -360,7 +361,7 @@ __parseInput () {
             --rx)
                 interfaceList[Rx]=16777236
                 shift 1
-                ;;       
+                ;;
             --sy)
                 interfaceList[Sy]=16777302
                 shift 1
@@ -415,7 +416,7 @@ __parseInput () {
     fi
 
 
-    
+
     return
 }
 
@@ -461,9 +462,9 @@ __collectHostData () {
 
     # Connect to the lb0x node and identify which diameter_endpoint
     # processes are running.
-    for i in $*	
+    for i in $*
     do
-        ssh -o ConnectTimeout=1 $i 'monit summary 2>/dev/null ; ps -ef | grep java | grep diameter 2>/dev/null' >$tmpDir/${i}/collectHostData_out.txt 2>$tmpDir/${i}/collectHostData_err.txt		
+        ssh -o ConnectTimeout=1 $i 'monit summary 2>/dev/null ; ps -ef | grep java | grep diameter 2>/dev/null' >$tmpDir/${i}/collectHostData_out.txt 2>$tmpDir/${i}/collectHostData_err.txt
     done
 
     return
@@ -486,14 +487,14 @@ __getPortData () {
     # Our money maker: Connect to peers and get
     # process connectivity data.
     for lb in $*
-    do 
+    do
         >$tmpDir/${lb}/getPortData_out.txt
         ###validate the output, bcs seems "Process" is not being taken in account
-		
-		for port in $(grep 'qns-[2-9]' $tmpDir/${lb}/collectHostData_out.txt 2>/dev/null| sed 's/.*qns-\([2-9]\).*/909\1/' 2>/dev/null| sort -n 2>/dev/null | paste -s -)
+
+		for port in $(grep 'qns-[2-9]' $tmpDir/${lb}/collectHostData_out.txt 2>/dev/null| sed 's/.*qns-\([2-9]\).*/909\1/' 2>/dev/null| sort -nu 2>/dev/null | paste -s -)
 		do
 		   echo -n "$port " >> $tmpDir/${lb}/getPortData_out.txt
-		done		
+		done
     done
 }
 
@@ -535,14 +536,14 @@ __resolveHostnames () {
        done
         for file2 in $tmpDir/${lb}/collectPeerData-nc_*.txt
         do
-            > ${file2}_TMP			
+            > ${file2}_TMP
             while read rrealm rhost rest
             do
-			    echo "$rrealm $rhost $(grep $rhost /etc/hosts 2>/dev/null| awk '{print "["$1"]"}') $rest" >> ${file2}_TMP &				
+			    echo "$rrealm $rhost $(grep $rhost /etc/hosts 2>/dev/null| awk '{print "["$1"]"}') $rest" >> ${file2}_TMP &
             done < <(grep '[[:alpha:]]' $file2 2>/dev/null)
             wait
             mv ${file2}_TMP ${file2}
-        done 
+        done
     done
     return
 }
@@ -553,7 +554,7 @@ __getHeaderLengths () {
     for lb in $*
     do
         awk '{ print length($1)}'  $tmpDir/${lb}/collectPeerData-nc_*.txt 2>/dev/null  >> $tmpDir/header/realm_column.txt 2>/dev/null &
-        awk '{ print length($2" "$3)}'  $tmpDir/${lb}/collectPeerData-nc_*.txt 2>/dev/null  >> $tmpDir/header/hostnameR_column.txt 2>/dev/null  &      
+        awk '{ print length($2" "$3)}'  $tmpDir/${lb}/collectPeerData-nc_*.txt 2>/dev/null  >> $tmpDir/header/hostnameR_column.txt 2>/dev/null  &
         awk '{ print length($0)}'  $tmpDir/${lb}/collectPeerData-id_*.txt 2>/dev/null  >> $tmpDir/header/hostnameL_column.txt 2>/dev/null  &
         wait
     done
@@ -587,12 +588,12 @@ __getHostErrors () {
         echo -e "  ${formatRed}$lbHost: ERROR: Could not get data from $lbHost${formatOff}\n"
     elif [[ "$(grep 'Could not resolve hostname' $tmpDir/${1}/getPortData_err.txt 2>/dev/null)" ]]
     then
-        echo -e "  ${formatRed}$lbHost: ERROR: Could not resolve hostname $1${formatOff}\n"           
+        echo -e "  ${formatRed}$lbHost: ERROR: Could not resolve hostname $1${formatOff}\n"
     else
         echo -e "  ${formatRed}$lbHost: ERROR: Could not get data from $1${formatOff}\n"
     fi
 
-    return 
+    return
 }
 
 
@@ -712,17 +713,17 @@ __printSummaryTable () {
     echo -n "                |"
 
     for interface in $(for i in "${!interfaceList[@]}"; do echo $i ; done | sort) ;  do printf "%-6s|"  "$(echo "  $interface" | sed "s/Prime/' /")" ; done
-    echo -en "\n   -------------|" ;for interface in "${interfaceList[@]}" ;  do printf "%-6s|"  "------"   ;done  
+    echo -en "\n   -------------|" ;for interface in "${interfaceList[@]}" ;  do printf "%-6s|"  "------"   ;done
 
-    for lbHost in $(for i in "${!lbHostList[@]}" ; do echo $i ; done | sort) 
+    for lbHost in $(for i in "${!lbHostList[@]}" ; do echo $i ; done | sort)
     do
         echo -en "\n     $lbHost peers |"
-        for interface in $(for i in "${!interfaceList[@]}"; do echo $i ; done | sort) 
-        do 
+        for interface in $(for i in "${!interfaceList[@]}"; do echo $i ; done | sort)
+        do
             count=$(($(grep -c "\<${interfaceList[$interface]}\>.*OKAY" $tmpDir/${lbHost}/collectPeerData-nc_*.txt 2>/dev/null| awk -F: '{print $2}' | paste -s - -d +)))
             printf "%-6s|" "  $count"
         done
-        echo -en "\n   -------------|" ;for interface in "${interfaceList[@]}" ;  do printf "%-6s|"  "------"   ;done  
+        echo -en "\n   -------------|" ;for interface in "${interfaceList[@]}" ;  do printf "%-6s|"  "------"   ;done
     done
     echo -e "\n\n"
 
@@ -748,7 +749,7 @@ __makeTmpDir "${!lbHostList[@]}"
 # Loop through each iteration of looping, which user wanted.
 while [[ "$loopCounter" -le "$loopCounterMax" ]]
 do
-     
+
     clear
     # Print an interation-level header.
     dateStart=$(date '+%s')
@@ -776,14 +777,14 @@ do
 
     __getHeaderLengths  "${!lbHostList[@]}" &
     wait
-	
+
 	# This is a clumsy way to figure out the appropriate width
     # for our remote hostname and remote realm columns. This
     # needs to be cleaned up.
     lengthLocalHost=$(sort -r $tmpDir/header/hostnameL_column.txt | head -1)
-    lengthRemoteHost=$(sort -r $tmpDir/header/hostnameR_column.txt | head -1) 
+    lengthRemoteHost=$(sort -r $tmpDir/header/hostnameR_column.txt | head -1)
     lengthRealm=$(sort -r $tmpDir/header/realm_column.txt | head -1)
-	
+
 	# Cycle through each of our $lbHost nodes and print a block of output.
     # Low grade approach to sorting the hash.
     for lbHost in $(for i in "${!lbHostList[@]}"; do echo $i ;done| sort)
@@ -792,7 +793,7 @@ do
         # $lbHost
         if [[ -s "$tmpDir/${lbHost}/getPortData_err.txt" ]]
         then
-            __getHostErrors $lbHost 
+            __getHostErrors $lbHost
             continue
         fi
 
@@ -803,27 +804,27 @@ do
             do
                 # Start with Diameter endpoint 1 (ie, the qns-2 process).
                 endpointCounter=2
-    
+
                 # Print an interface-level field seperator for this section of data.
                 # Then print the header for that interface.
                 echo "  ${fieldSep}" | sed 's/#/=/g'
                 __printInterfaceHeader $lbHost $interface $lengthLocalHost $lengthRemoteHost $lengthRealm
-        
+
                 # For each port in this $lbHost's list of ports,
                 # print the data captured for that port.
                 for port in $(cat $tmpDir/${lbHost}/getPortData_out.txt)
                 do
                     __printInterfaceData $lbHost $interface $port qns-${endpointCounter} $lengthLocalHost $lengthRemoteHost $lengthRealm
                     ((endpointCounter++))
-                done        
+                done
                 echo
            done
            echo
        fi
     done
-	
+
 	__printSummaryTable
-	
+
 	# If we have additional loop iterations to go, then sleep
     if [[ $(($loopCounterMax - $loopCounter))  -ge 1 ]]
     then
@@ -832,14 +833,14 @@ do
         then
             sleep $(( $sleepInterval - $duration))
         fi
-    fi	
+    fi
 
-    ((loopCounter++))	
+    ((loopCounter++))
 done
 
 # Clean up temp dirs.
 if [[ "$(echo "$tmpDir" | grep "${timestamp}.$$" 2>/dev/null)" ]]
-then 
+then
     rm -rf $tmpDir 2>/dev/null
 fi
 
@@ -847,6 +848,3 @@ exit
 ##########################################################################
 # END MAIN
 ##########################################################################
-
-
-
