@@ -26,7 +26,7 @@
 #############
 # Version 2.2 (Wed Oct 12 2019)
 #  -Author: yjuarezh@cisco.com
-#  - Yeimi Juarez Herandez
+#  - Yeimi Juarez Hernandez
 #  -Fixed for CPS 19.4
 #  -
 # Version 2.1 (Wed Nov 15 10:54:00 MST 2017)
