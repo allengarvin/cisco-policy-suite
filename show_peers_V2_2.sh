@@ -720,7 +720,7 @@ __printSummaryTable () {
         echo -en "\n     $lbHost peers |"
         for interface in $(for i in "${!interfaceList[@]}"; do echo $i ; done | sort)
         do
-            count=$(($(grep -c "\<${interfaceList[$interface]}\>.*OKAY" $tmpDir/${lbHost}/collectPeerData-nc_*.txt 2>/dev/null| awk -F: '{print $2}' | paste -s - -d +)))
+            count=$(($(grep -c "\<${interfaceList[$interface]}\>.*OKAY" $tmpDir/${lbHost}/collectPeerData-nc_*.txt 2>/dev/null| awk -F: '{print $1}' | paste -s - -d +)))
             printf "%-6s|" "  $count"
         done
         echo -en "\n   -------------|" ;for interface in "${interfaceList[@]}" ;  do printf "%-6s|"  "------"   ;done
