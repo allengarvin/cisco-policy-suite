@@ -273,11 +273,15 @@ def main(args):
 
     print(f"== Report for {args.name} ({alert_map.count} snmp traps present) ==")
     print("  Resolved alerts:")
-    cnt = alert_map.show_resolved_alerts(args)
-    print(f"  Resolved total: {cnt} [{cnt*2} traps]")
+    rcnt = alert_map.show_resolved_alerts(args)
+    print("------------------")
     print("  Unresolved alerts:")
-    cnt = alert_map.show_unresolved_alerts(args)
-    print(f"  Unresolved total: {cnt} traps")
+    print("--------------------")
+    ucnt = alert_map.show_unresolved_alerts(args)
+    print("--------------------")
+    print(f"  Total traps present: {alert_map.count}")
+    print(f"  Resolved total: {rcnt} [{rcnt*2} traps]")
+    print(f"  Unresolved total: {ucnt} traps")
     
     sys.exit(0)
 
