@@ -109,7 +109,7 @@ class alertMap:
     
                 if alert.status == True:
                     delta = alert.date - prev.date
-                    if args.all or check_time_args(args, delta.seconds):
+                    if not args.least or check_time_args(args, delta.seconds):
                         count += 1
                         if flag == False:
                             if not args.script:
@@ -125,7 +125,20 @@ class alertMap:
                             script_fd.write(f"{msg}\n")
                             script_fd.write(f"{command}\n\n")
 
-            return count
+        return count
+
+    def show_unresolved_alerts(self, args):
+        count = 0
+        for k, v in self.alerts_map.items():
+            if args.verbose:
+                print("DEBUG: last alert:", repr(v[-1]), v[-1].status)
+            if len(v) and v[-1].status == False:
+                count += 1
+                alert = v[-1]
+                print(f"    {k:<35} Fired: {alert.date} | Duration: {(self.last - alert.date).seconds} sec")
+                
+        return count
+
 def mk_alert_map(args, alerts):
     alerts_map = {}
 
@@ -137,7 +150,7 @@ def mk_alert_map(args, alerts):
             ignore_expressions.append(re.compile(r))
 
     for a in alerts:
-        if a.all_attributes["broadhopComponentNotificationName"] != args.name:
+        if a.snmptype != args.name:
             continue
 
         if skipp(ignore_expressions, a.name):
@@ -242,10 +255,6 @@ OUTFILE="/tmp/curl-report-$1.txt"
     return script_fd
 
 def main(args):
-    if args.all and args.script:
-        print("You probably shouldn't use --all with --script")
-        sys.exit(1)
-
     all_alerts = read_alerts(args)
     list_alerts_present(args, all_alerts)
 
@@ -258,8 +267,6 @@ def main(args):
     if args.list:
         sys.exit(0)
 
-
-
     alert_map = mk_alert_map(args, all_alerts)
     if args.script:
         alert_map.script_fd = initial_script(args)
@@ -268,26 +275,14 @@ def main(args):
     print("  Resolved alerts:")
     cnt = alert_map.show_resolved_alerts(args)
     print(f"  Resolved total: {cnt} [{cnt*2} traps]")
+    print("  Unresolved alerts:")
+    cnt = alert_map.show_unresolved_alerts(args)
+    print(f"  Unresolved total: {cnt} traps")
     
-    sys.exit(1)
-
-
+    sys.exit(0)
 
     count = 0
     #print(peers_map)
-    if args.unresolved:
-        cnt = 0
-        for k, v in peers_map.items():
-            if skipp(ignore_expressions, k):
-                continue
-            if len(v) and v[-1].status == True:
-                if not cnt:
-                    print("Unresolved alerts:")
-                cnt += 1
-                alert = v[-1]
-                print(f"  {k:<35} fired: {alert.date} duration: {(last_date - alert.date).seconds} sec")
-                
-        print("Total unresolved alerts:", cnt)
 
     if args.script:
         script_fd.close()
@@ -303,10 +298,9 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser(description="Analyze snmp trap alerts")
 #   logic changed to least and max.
 #     ap.add_argument("-t", "--time", default=deftime, type=float, help=f"time delta (float) in seconds between alert and clear (default={deftime:.1f})")
-    ap.add_argument("-a", "--all", action="store_true", help="Display ALL down alerts and durations")
     ap.add_argument("-i", "--ignore", nargs="*", help="ignore regexp (includes default ^sigm)")
     ap.add_argument("--list", action="store_true", help="List all alert names present in traps and immediately exit")
-    ap.add_argument("-l", "--least", default=90.0, type=float, help="least time to recovery (default=90)")
+    ap.add_argument("-l", "--least", default=0.0, type=float, help="least time to recovery)")
     ap.add_argument("-m", "--max", default=0, type=float, help="max time to recovery (optional. It not present, no max)")
     ap.add_argument("-n", "--name", type=str, default="DIAMETER_PEER_DOWN", help="Alert name (default: DIAMETER_PEER_DOWN)")
     ap.add_argument("-o", "--outside", action="store_true", help="Use OUTSIDE the values")
