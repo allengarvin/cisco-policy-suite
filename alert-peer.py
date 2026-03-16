@@ -1,6 +1,9 @@
 #!/usr/bin/python3
 
-# Version 1.2 20260316
+# This works against CPS vDRA. See trap-analysis.py for my script for the PCRF.
+# This has been generalized for any alert type. I might rewrite it later
+
+# Version 1.3 20260316
 # Author: "Allen Garvin" <algarvin@cisco.com>
 # Copyright: 2026 Cisco, Inc
 
@@ -12,10 +15,11 @@ import re
 import stat
 import sys
 
-class peerDown:
+class alertInstance:
     pattern = r'\S+::([^\s.=]+(?:\.\d+)?)\s*=\s*\S+:\s*(.*?)(?=\s+\S+::|$)'
 
-    date, peer, status = None, None, None
+    date, name, status, snmptype = None, None, None, None
+    all_attributes = None
 
     # ARRRRRRRRRG they switch month and day. It's SO close to ISO time!
     def parse_broadhop_time(self, s: str):
@@ -28,7 +32,13 @@ class peerDown:
         return "  %s" % ("DOWN: " if self.status == False else "UP: " ) + self.date.isoformat().replace("+00:00", "").replace("T", " ")
 
     def __repr__(self):
-        return self.__str__()
+        dt = self.date.isoformat().replace("+00:00", "").replace("T", " ")
+        name = self.all_attributes["broadhopComponentNotificationName"]
+        facility = self.all_attributes["broadhopNotificationFacility"]
+        severity = self.all_attributes["broadhopNotificationSeverity"]
+        info = self.all_attributes["broadhopComponentAdditionalInfo"]
+
+        return f"{dt} | {name} | Fac={facility} | Sev={severity} | {info}"
 
     def __init__(self, line: str):
         try:
@@ -36,16 +46,21 @@ class peerDown:
         except:
             print(line)
             sys.exit(1)
-        result = {key.split('.')[0]: value.strip() for key, value in matches}
+        result = { k.split('.')[0]: v.strip() for k, v in matches}
+
+        self.snmptype = result["broadhopComponentNotificationName"]
+
         if "broadhopComponentTime" in result:
             self.date = self.parse_broadhop_time(result["broadhopComponentTime"])
+            result["broadhopComponentTime"] = self.parse_broadhop_time(result["broadhopComponentTime"])
         else:
             print("NO TIME", line)
 
         if "broadhopComponentName" in result:
-            self.peer = result["broadhopComponentName"]
-            if "/" in self.peer:
-                self.peer = self.peer[self.peer.index("/")+1:]
+            self.name = result["broadhopComponentName"]
+            if "/" in self.name:
+                self.name = self.name[self.name.index("/")+1:]
+            result["broadhopComponentName"] = self.name
         else:
             print("NO PEER", line)
 
@@ -60,28 +75,96 @@ class peerDown:
                 sys.exit(1)
         else:
             print("PROBLEM")
+
+#        for k, v in result.items():
+#            print(k, v)
+#            
+#        sys.exit(1)
+        self.all_attributes = result
+
         # print(result)
 
+class alertMap:
+    alerts_map = {}
 
-def mk_peer_map(args):
-    peers_map = {}
-    last_date = None
+    first, last = None, None
+    script_fd = None
 
-    for fn in args.trapfiles:
-        openf = gzip.open if fn.endswith(".gz") else open
-        fd = openf(fn, mode="rt", encoding="utf-8")
-        for line in fd:
-            if f" {args.name}\t" in line:
-                alert = peerDown(line)
-                peer = alert.peer
-                if peer not in peers_map:
-                    peers_map[peer] = [alert]
-                else:
-                    peers_map[peer].append(alert)
-                if last_date is None or alert.date > last_date:
-                    last_date = alert.date
-        fd.close()
-    return peers_map, last_date
+    def __init__(self, mapping: dict, first: DT.datetime, last: DT.datetime):
+        for k, v in mapping.items():
+            mapping[k] = sorted(v, key=lambda x: x.date)
+        self.alerts_map = mapping
+        self.first = first
+        self.last = last
+        
+    def show_resolved_alerts(self, args):
+
+        count = 0
+
+        for k, v in self.alerts_map.items():
+            flag = False
+            for i in range(1, len(v)):
+                alert = v[i]
+                prev = v[i-1]
+    
+                if alert.status == True:
+                    delta = alert.date - prev.date
+                    if args.all or check_time_args(args, delta.seconds):
+                        count += 1
+                        if flag == False:
+                            if not args.script:
+                                print("Component Name:", k)
+                            else:
+                                script_fd.write(f"echo 'Component Name: {k}' >> $OUTFILE\n\n")
+                            flag = True
+                        if not args.script:
+                            print(f"    Duration: {delta.seconds:5} sec  {prev} {alert}")
+                        else:
+                            msg = f"echo '{alert.date}: {delta.seconds:5} sec  {prev} {alert}' >> $OUTFILE"
+                            command = f'curl -G "http://localhost:9090/api/v1/query_range" --data-urlencode \'query=peer_connection_status{{remote_peer="{k}"}}\' --data-urlencode "start={prev.zulu_delta(-60)}" --data-urlencode "end={alert.zulu_delta(60)}" --data-urlencode "step=1s" | python -m json.tool >> $OUTFILE'
+                            script_fd.write(f"{msg}\n")
+                            script_fd.write(f"{command}\n\n")
+
+            return count
+def mk_alert_map(args, alerts):
+    alerts_map = {}
+
+    first_date, last_date, count = None, None, 0
+
+    ignore_expressions = [ re.compile("^sigm") ]
+    if args.ignore:
+        for r in args.ignore:
+            ignore_expressions.append(re.compile(r))
+
+    for a in alerts:
+        if a.all_attributes["broadhopComponentNotificationName"] != args.name:
+            continue
+
+        if skipp(ignore_expressions, a.name):
+            continue
+
+        if args.verbose:
+            print("DEBUG", repr(a))
+        if not first_date:
+            first_date = a.date
+        if not last_date:
+            last_date = a.date
+
+        if a.name in alerts_map:
+            alerts_map[a.name].append(a)
+        else:
+            alerts_map[a.name] = [a]
+    
+        count += 1
+
+        if a.date > last_date:
+            last_date = a.date
+        if a.date < first_date:
+            first_date = a.date
+
+    am_obj = alertMap(alerts_map, first_date, last_date)
+    am_obj.count = count
+    return am_obj
 
 def check_time_args(args, secs):
     if args.least and not args.max:
@@ -107,26 +190,46 @@ def skipp(ignore, k):
 
     return True if flag_skip else False
 
-def main(args):
-    ignore_expressions = [ re.compile("^sigm") ]
-    if args.ignore:
-        for r in args.ignore:
-            ignore_expressions.append(re.compile(r))
-    script_fd = None
-    peers_map, last_date = mk_peer_map(args)
+def list_alerts_present(args, alerts):
+    notifications = {}
+    length = -1
 
-    if args.all and args.script:
-        print("You probably shouldn't use --all with --script")
+    for a in alerts:
+        name = a.all_attributes["broadhopComponentNotificationName"]
+        if len(name) > length:
+            length = len(name)
+
+        if name in notifications:
+            notifications[name] += 1
+        else:
+            notifications[name] = 1
+    for n in sorted(notifications.keys()):
+        print("  ", n.ljust(length), notifications[n])
+    print("# alert types:", len(notifications))
+
+
+def read_alerts(args):
+    alerts = []
+
+    for fn in args.trapfiles:
+        openf = gzip.open if fn.endswith(".gz") else open
+        fd = openf(fn, mode="rt", encoding="utf-8")
+        for line in fd:
+            if "BROADHOP-MIB" not in line:
+                continue
+            alerts.append(alertInstance(line))
+    
+    print("# Alerts parsed:", len(alerts))
+    return alerts
+     
+def initial_script(args):
+    try:
+        script_fd = open("alert-curl.sh", "w") 
+    except:
+        print("Unable to open alert-curl.sh for writing. Exiting")
         sys.exit(1)
-
-    if args.script:
-        try:
-            script_fd = open("alert-curl.sh", "w") 
-        except:
-            print("Unable to open alert-curl.sh for writing. Exiting")
-            sys.exit(1)
-        script_fd.write("#!/bin/bash\n\n")
-        script_fd.write("""
+    script_fd.write("#!/bin/bash\n\n")
+    script_fd.write("""
 if (( $# == 0 )); then
     echo "Give current high-res container. For instance: ./$0 s101"
     exit 1
@@ -136,40 +239,42 @@ OUTFILE="/tmp/curl-report-$1.txt"
 
 
 """)
+    return script_fd
+
+def main(args):
+    if args.all and args.script:
+        print("You probably shouldn't use --all with --script")
+        sys.exit(1)
+
+    all_alerts = read_alerts(args)
+    list_alerts_present(args, all_alerts)
+
+    if args.raw:
+        for a in all_alerts:
+            if a.snmptype == args.name:
+                print(repr(a))
+        sys.exit(0)
+
+    if args.list:
+        sys.exit(0)
+
+
+
+    alert_map = mk_alert_map(args, all_alerts)
+    if args.script:
+        alert_map.script_fd = initial_script(args)
+
+    print(f"== Report for {args.name} ({alert_map.count} snmp traps present) ==")
+    print("  Resolved alerts:")
+    cnt = alert_map.show_resolved_alerts(args)
+    print(f"  Resolved total: {cnt} [{cnt*2} traps]")
+    
+    sys.exit(1)
+
+
 
     count = 0
     #print(peers_map)
-    for k, v in peers_map.items():
-        if skipp(ignore_expressions, k):
-            continue
-
-        v = sorted(v, key=lambda x: x.date)
-        flag = False
-        for i in range(len(v)):
-            alert = v[i]
-            prev = v[i-1]
-            if alert.status == True:
-                delta = alert.date - prev.date
-                #print(prev, alert, delta.seconds)
-                if args.all or check_time_args(args, delta.seconds):
-
-                # old logic:
-                # if (delta.seconds < args.time and not args.over) or (delta.seconds > args.time and args.over) or args.all:
-                #
-                    count += 1
-                    if flag == False:
-                        if not args.script:
-                            print("Component Name:", k)
-                        else:
-                            script_fd.write(f"echo 'Component Name: {k}' >> $OUTFILE\n\n")
-                        flag = True
-                    if not args.script:
-                        print(f"    Duration: {delta.seconds:5} sec  {prev} {alert}")
-                    else:
-                        msg = f"echo '{alert.date}: {delta.seconds:5} sec  {prev} {alert}' >> $OUTFILE"
-                        command = f'curl -G "http://localhost:9090/api/v1/query_range" --data-urlencode \'query=peer_connection_status{{remote_peer="{k}"}}\' --data-urlencode "start={prev.zulu_delta(-60)}" --data-urlencode "end={alert.zulu_delta(60)}" --data-urlencode "step=1s" | python -m json.tool >> $OUTFILE'
-                        script_fd.write(f"{msg}\n")
-                        script_fd.write(f"{command}\n\n")
     if args.unresolved:
         cnt = 0
         for k, v in peers_map.items():
@@ -198,14 +303,17 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser(description="Analyze snmp trap alerts")
 #   logic changed to least and max.
 #     ap.add_argument("-t", "--time", default=deftime, type=float, help=f"time delta (float) in seconds between alert and clear (default={deftime:.1f})")
+    ap.add_argument("-a", "--all", action="store_true", help="Display ALL down alerts and durations")
+    ap.add_argument("-i", "--ignore", nargs="*", help="ignore regexp (includes default ^sigm)")
+    ap.add_argument("--list", action="store_true", help="List all alert names present in traps and immediately exit")
     ap.add_argument("-l", "--least", default=90.0, type=float, help="least time to recovery (default=90)")
     ap.add_argument("-m", "--max", default=0, type=float, help="max time to recovery (optional. It not present, no max)")
-    ap.add_argument("-s", "--script", action="store_true", help="Generate bash script to check hi-res data")
-    ap.add_argument("trapfiles", nargs="+", help="trap files")
-    ap.add_argument("-a", "--all", action="store_true", help="Display ALL down alerts and durations")
-    ap.add_argument("-o", "--outside", action="store_true", help="Use OUTSIDE the values")
-    ap.add_argument("-i", "--ignore", nargs="*", help="ignore regexp (includes default ^sigm)")
     ap.add_argument("-n", "--name", type=str, default="DIAMETER_PEER_DOWN", help="Alert name (default: DIAMETER_PEER_DOWN)")
+    ap.add_argument("-o", "--outside", action="store_true", help="Use OUTSIDE the values")
+    ap.add_argument("-r", "--raw", action="store_true", help="Raw list of alerts and immediately exit")
+    ap.add_argument("-s", "--script", action="store_true", help="Generate bash script to check hi-res data")
     ap.add_argument("-u", "--unresolved", action="store_true", help="Unresolved alerts (without a clear)")
+    ap.add_argument("-v", "--verbose", action="store_true", help="Debugging info")
+    ap.add_argument("trapfiles", nargs="+", help="trap files")
     args = ap.parse_args()
     main(args)
