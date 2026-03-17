@@ -132,10 +132,20 @@ class alertMap:
         for k, v in self.alerts_map.items():
             if args.verbose:
                 print("DEBUG: last alert:", repr(v[-1]), v[-1].status)
-            if len(v) and v[-1].status == False:
+            if len(v) and v[len(v)-1].status == False:
                 count += 1
-                alert = v[-1]
-                print(f"    {k:<35} Fired: {alert.date} | Duration: {(self.last - alert.date).seconds} sec")
+
+                first = len(v) - 1
+                cnt = 0
+                while first >= 0:
+                    alert = v[first]
+                    if alert.status == False:
+                        cnt += 1
+                    else:
+                        break
+                    first -= 1
+                        
+                print(f"    {k:<35} Fired: {alert.date} | Duration: {(self.last - alert.date).seconds} sec [{cnt} alerts]")
                 
         return count
 
