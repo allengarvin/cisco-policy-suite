@@ -144,8 +144,9 @@ class alertMap:
                     else:
                         break
                     first -= 1
+                    prev = alert
                         
-                print(f"    {k:<35} Fired: {alert.date} | Duration: {(self.last - alert.date).seconds} sec [{cnt} alerts]")
+                print(f"    {k:<35} Fired: {prev.date} | Duration: {(self.last - prev.date).seconds} sec [{cnt} alerts]")
                 
         return count
 
