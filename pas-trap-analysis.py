@@ -148,7 +148,8 @@ class alertMap:
                     prev = alert
                         
                 if prev:
-                    print(f"    {k:<35} Fired: {prev.date} | Duration: {(self.last - prev.date).seconds} sec [{cnt} alerts]")
+                    s = "alerts" if cnt > 1 else "alert"
+                    print(f"    {k:<35} Fired: {prev.date} | Duration: {(self.last - prev.date).seconds} sec [{cnt} {s}]")
                 
         return count
 
