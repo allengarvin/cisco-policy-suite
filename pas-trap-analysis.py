@@ -118,7 +118,7 @@ class alertMap:
                                 script_fd.write(f"echo 'Component Name: {k}' >> $OUTFILE\n\n")
                             flag = True
                         if not args.script:
-                            print(f"    Duration: {delta.seconds:5} sec  {prev} {alert}")
+                            print(f"    Duration: {delta.seconds:10} sec  {prev} {alert}")
                         else:
                             msg = f"echo '{alert.date}: {delta.seconds:5} sec  {prev} {alert}' >> $OUTFILE"
                             command = f'curl -G "http://localhost:9090/api/v1/query_range" --data-urlencode \'query=peer_connection_status{{remote_peer="{k}"}}\' --data-urlencode "start={prev.zulu_delta(-60)}" --data-urlencode "end={alert.zulu_delta(60)}" --data-urlencode "step=1s" | python -m json.tool >> $OUTFILE'
@@ -269,6 +269,7 @@ def main(args):
     list_alerts_present(args, all_alerts)
 
     if args.raw:
+        all_alerts = sorted(all_alerts, key=lambda x: x.date)
         for a in all_alerts:
             if a.snmptype == args.name:
                 print(repr(a))
