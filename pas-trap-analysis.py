@@ -137,6 +137,7 @@ class alertMap:
 
                 first = len(v) - 1
                 cnt = 0
+                prev = None
                 while first >= 0:
                     alert = v[first]
                     if alert.status == False:
@@ -146,7 +147,8 @@ class alertMap:
                     first -= 1
                     prev = alert
                         
-                print(f"    {k:<35} Fired: {prev.date} | Duration: {(self.last - prev.date).seconds} sec [{cnt} alerts]")
+                if prev:
+                    print(f"    {k:<35} Fired: {prev.date} | Duration: {(self.last - prev.date).seconds} sec [{cnt} alerts]")
                 
         return count
 
