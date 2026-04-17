@@ -26,7 +26,7 @@ def info(args: argparse.Namespace, msg: str):
     if not args.quiet:
         print(msg)
 
-def contiguous_blocks(times: list[int], step: int):
+def contiguous_blocks(times: list, step: int):
     if not times:
         return []
 
